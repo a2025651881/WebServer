@@ -83,4 +83,42 @@ void Log::init(nt level, const char *path, const char *suffix, int maxQueCapacit
     {
         isAsync_ = false;
     }
+
+    lineCount_ = 0;
+
+    // 获取当前时间
+    time_t timer = time(nullptr);
+    struct tm *systime = localtime(&timer);
+
+    // 定义日志文件名缓冲区
+    char fileName[LOG_NAME_LEN] = {0};
+
+    // 根据路径、日期和后缀生成日志文件名
+    snprintf(fileName, LOG_NAME_LEN - 1, "%s/%04d_%02d_%02d%s",
+             path_, systime->tm_year + 1900, systime->tm_mon + 1, systime->tm_mday,
+             suffix_);
+
+    // 保存当前日期
+    toDay_ = systime->tm_mday;
+
+    //  使用互斥锁保护文件操作
+    {
+        lock_guard<mutex> locker(mtx_);
+        buff_.RetrieveAll();
+
+        if (fp_)
+        {
+            flush();
+            fclose(fp_);
+        }
+
+        fp_ = fopen(fileName, "a");
+        if (fp_ == nullptr)
+        {
+            mkdir(fileName, 0777);      // 创建目录，最大权限
+            fp_ = fopen(fileName, "a"); // 再次尝试打开文件
+        }
+
+        assert(fp_ != nullptr); // 如果文件指针仍然无效，断言失败
+    }
 }
