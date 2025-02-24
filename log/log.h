@@ -50,9 +50,9 @@ private:
 
     bool isOpen_;               
  
-    Buffer buff_;       // 输出的内容，缓冲区
-    int level_;         // 日志等级
-    bool isAsync_;      // 是否开启异步日志
+    Buffer buff_;               // 输出的内容，缓冲区
+    int level_;                 // 日志等级
+    bool isAsync_;              // 是否开启异步日志
 
     FILE* fp_;                                          //打开log的文件指针
     std::unique_ptr<BlockQueue<std::string>> deque_;    //阻塞队列
