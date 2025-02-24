@@ -58,6 +58,12 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "bitset": "cpp",
+        "unordered_set": "cpp",
+        "buffer": "cpp",
+        "netfwd": "cpp",
+        "regex": "cpp",
+        "sstream": "cpp"
     }
 }
