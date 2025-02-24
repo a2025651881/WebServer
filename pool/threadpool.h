@@ -55,6 +55,9 @@ private:
         std::mutex mtx_;
         std::condition_variable cond_;
         bool isClosed;
+        //过 std::forward 转发的 task 可以是左值或右值，emplace 会根据其值类别进行相应的构造：
+        //如果 task 是左值，emplace 会调用拷贝构造函数。
+        //如果 task 是右值，emplace 会调用移动构造函数。
         std::queue<std::function<void()>> tasks;
     };
     std::shared_ptr<Pool> pool_;
