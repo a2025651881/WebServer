@@ -111,6 +111,7 @@ void HttpResponse::AddContent_(Buffer& buff){
     }
 
     LOG_DEBUG("file path %s",(srcDir_ + path_).data());
+    // 将文件或设备映射到进程的地址空间中
     int* mmRet = (int*)mmap(0, mmFileStat_.st_size, PROT_READ, MAP_PRIVATE, srcFd, 0);
     if(*mem_Ret == -1){
         ErrorContent(buff,"File NotFound!");
@@ -127,5 +128,40 @@ void HttpResponse::UnmapFile(){
         mmFile_ = nullptr;
     }
 }
+
+
+//判断文件类型
+string HttpResponse::GetFileType_(){
+    string::size_type idx=path_.find_last_of('.');
+    if(idx == string::npos) {   //最大值 find函数在找不到指定值的情况下会返回 npos
+        return "text/plain";
+    }
+    string suffix = path_.substr(idx);
+    if(SUFFIX_TYPE.count(suffix) == 1){
+        return SUFFIX_TYPE.find(suffix) ->second;
+    }
+    return "text/plain";
+}
+
+
+void HttpResponse::ErrorContent(Buffer& buff,string message){
+    string body;
+    string status;
+    body+= "<html><title>Error</title>";
+    body+= "<body bgcolor=\"ffffff\">";
+    if(CODE_STATUS.count(code_) == 1){
+        status = CODE_STATUS.find(code_)->second;
+    }else{
+        status = "Bad Requset";
+    }
+
+    body += to_string(code_)+ " : " + status +"\n";
+    body += "<p>" + message + "</p>";
+    body += "<hr><em>TinyWebServer</em></body></html>";
+
+    buff.Append("Content-lenth:"+ to_string(body.size())+"\r\n\r\n");
+    buff.Append(body); 
+}
+
 
 #endif
