@@ -75,13 +75,164 @@ bool HttpRequest::ParseRequestLine_(const string& line){
     if(regex_match(line,subMatch,patten)){
         // subMatch[0] 是整个捕获的字符串
         method_ =subMatch[1];
-
+        path_ = subMatch[2];
+        version_ = subMatch[3];
+        state_ = HEADERS;   // 状态转换为下一个状态
+        return true;
     }
+    LOG_ERROR("RequestLine Error");
+    return false;
 }
 
 void HttpRequest::ParseHeader_(const string& line){
-
+    regex patten("^([^:]*): ?(.*)$");
+    smatch subMatch;
+    if(regex_match(line, subMatch, patten)) {
+        header_[subMatch[1]] = subMatch[2];
+    }
+    else {
+        state_ = BODY;  // 状态转换为下一个状态
+    }
 }
+
+void HttpRequest::ParseBody_(const string& line) {
+    body_ = line;
+    ParsePost_();
+    state_ = FINISH;    // 状态转换为下一个状态
+    LOG_DEBUG("Body:%s, len:%d", line.c_str(), line.size());
+}
+
+int HttpRequest::ConverHex(char ch) {
+    if(ch >= 'A' && ch <= 'F') return ch -'A' + 10;
+    if(ch >= 'a' && ch <= 'f') return ch -'a' + 10;
+    return ch;
+}
+
+void HttpRequest::ParsePost_() {
+    if(method_ == "POST" && header_["Content-Type"] == "application/x-www-form-urlencoded") {
+        ParseFromUrlencoded_();     // POST请求体示例
+        if(DEFAULT_HTML_TAG.count(path_)) { // 如果是登录/注册的path
+            int tag = DEFAULT_HTML_TAG.find(path_)->second; 
+            LOG_DEBUG("Tag:%d", tag);
+            if(tag == 0 || tag == 1) {
+                bool isLogin = (tag == 1);  // 为1则是登录
+                if(UserVerify(post_["username"], post_["password"], isLogin)) {
+                    path_ = "/welcome.html";
+                } 
+                else {
+                    path_ = "/error.html";
+                }
+            }
+        }
+    }   
+}
+
+void HttpRequest::ParseFromUrlencoded_() {
+    if(body_.size() == 0) { return; }
+
+    string key, value;
+    int num = 0;
+    int n = body_.size();
+    int i = 0, j = 0;
+
+    for(; i < n; i++) {
+        char ch = body_[i];
+        switch (ch) {
+        // key
+        case '=':
+            key = body_.substr(j, i - j);
+            j = i + 1;
+            break;
+        // 键值对中的空格换为+或者%20
+        case '+':
+            body_[i] = ' ';
+            break;
+        case '%':
+            num = ConverHex(body_[i + 1]) * 16 + ConverHex(body_[i + 2]);
+            body_[i + 2] = num % 10 + '0';
+            body_[i + 1] = num / 10 + '0';
+            i += 2;
+            break;
+        // 键值对连接符
+        case '&':
+            value = body_.substr(j, i - j);
+            j = i + 1;
+            post_[key] = value;
+            LOG_DEBUG("%s = %s", key.c_str(), value.c_str());
+            break;
+        default:
+            break;
+        }
+    }
+    assert(j <= i);
+    if(post_.count(key) == 0 && j < i) {
+        value = body_.substr(j, i - j);
+        post_[key] = value;
+    }
+}
+
+bool HttpRequest::UserVerify(const string &name, const string &pwd, bool isLogin) {
+    if(name == "" || pwd == "") { return false; }
+    LOG_INFO("Verify name:%s pwd:%s", name.c_str(), pwd.c_str());
+    MYSQL* sql;
+    SqlConnRAII(&sql,  SqlConnPool::Instance());
+    assert(sql);
+    
+    bool flag = false;
+    unsigned int j = 0;
+    char order[256] = { 0 };
+    MYSQL_FIELD *fields = nullptr;
+    MYSQL_RES *res = nullptr;
+    
+    if(!isLogin) { flag = true; }
+    /* 查询用户及密码 */
+    snprintf(order, 256, "SELECT username, password FROM user WHERE username='%s' LIMIT 1", name.c_str());
+    LOG_DEBUG("%s", order);
+
+    if(mysql_query(sql, order)) { 
+        mysql_free_result(res);
+        return false; 
+    }
+    res = mysql_store_result(sql);
+    j = mysql_num_fields(res);
+    fields = mysql_fetch_fields(res);
+
+    while(MYSQL_ROW row = mysql_fetch_row(res)) {
+        LOG_DEBUG("MYSQL ROW: %s %s", row[0], row[1]);
+        string password(row[1]);
+        /* 注册行为 且 用户名未被使用*/
+        if(isLogin) {
+            if(pwd == password) { flag = true; }
+            else {
+                flag = false;
+                LOG_INFO("pwd error!");
+            }
+        } 
+        else { 
+            flag = false; 
+            LOG_INFO("user used!");
+        }
+    }
+    mysql_free_result(res);
+
+    /* 注册行为 且 用户名未被使用*/
+    if(!isLogin && flag == true) {
+        LOG_DEBUG("regirster!");
+        bzero(order, 256);
+        snprintf(order, 256,"INSERT INTO user(username, password) VALUES('%s','%s')", name.c_str(), pwd.c_str());
+        LOG_DEBUG( "%s", order);
+        if(mysql_query(sql, order)) { 
+            LOG_DEBUG( "Insert error!");
+            flag = false; 
+        }
+        flag = true;
+    }
+    // SqlConnPool::Instance()->FreeConn(sql);
+    LOG_DEBUG( "UserVerify success!!");
+    return flag;
+}
+
+
 
 
 bool HttpRequest::IsKeepAlive() const{
