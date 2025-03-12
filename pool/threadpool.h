@@ -24,7 +24,7 @@ public:
                         pool_->tasks.pop();
                         locker.unlock();    // 因为已经把任务取出来了，所以可以提前解锁了
                         task();
-                        locker.lock();      
+                        locker.lock();
                     }else if(pool_-> isClosed){
                         break;
                     }else {
