@@ -174,5 +174,66 @@ void WebServer::OnWrite_(HttpConn* client){
 bool  WebServer::InitSocket_(){
     int ret;
     struct sockaddr_in addr;
-    
+    if(port_ > 65535 || port_ <1024) {
+        LOG_ERROR("Port:%d error!", port_);
+        return false;
+    }
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(port_);
+
+    //  优雅关闭
+    {
+    struct linger optLinger ={ 0 };
+    if(openLinger_){
+        // 优雅关闭：直到所剩数据发送完毕或者超时
+        optLinger.l_onoff =1;
+        optLinger.l_linger =1;
+    }
+
+    listenFd_ = socket(AF_INET,SOCK_STREAM, 0);
+    if(listenFd_ < 0){
+        LOG_ERROR("Create socket error!",port_);
+        return false;
+    }
+
+    ret =setsockopt(listenFd_,SOL_SOCKET,SO_LINGER,&optLinger,sizeof(optLinger));
+    if(ret<0){
+        close(listenFd_);
+        LOG_ERROR("Init linger error!",port_);
+        return false;
+    }
+
+    //绑定
+    ret = bind(listenFd_,(struct sockaddr *)&addr,sizeof(addr));
+    if(ret < 0){
+        LOG_ERROR("Bind Port:%d error!",port_);
+        close(listenFd_);
+        return false;
+    };
+
+    //监听
+    ret = listen(listenFd_,6);
+    if(ret < 0){
+        LOH_ERROR("Listen port:%d error!",port_);
+        close(listenFd_);
+        return fasle;
+    }
+    //将监听套接字加入epoller
+    ret = epoller_->AddFd(listenFd_,listenEven_ | EPOLLIN);
+    if(ret == 0){
+        LOG_ERROR("Add listen error!");
+        clsoe(listenFd_);
+        return false;
+    }
+    SetFdNonblock(listenFd_);
+    LOG_INFO("Server port:%d",port_);
+    return true;
+}
+
+//设置非阻塞
+int WebServer::SetFdNonblock(int fd){
+    assert(fd > 0);
+    return fcntl(fd,F_SETFL,fctnl(fd,F_GETFD,0) | O_NONBLOCK);
+}
 }
